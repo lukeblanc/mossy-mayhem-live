@@ -27,6 +27,20 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/glass_background"
+            android:paddingStart="16dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp"
+            android:text="V0.3 • SCENE BRAIN TEST"
+            android:textColor="@color/moss_lime"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:text="@string/tagline"
             android:textColor="@color/moss_lime"
@@ -37,7 +51,7 @@
             android:id="@+id/startButton"
             android:layout_width="match_parent"
             android:layout_height="72dp"
-            android:layout_marginTop="64dp"
+            android:layout_marginTop="54dp"
             android:text="@string/start_camera"
             android:textSize="18sp"
             android:textStyle="bold"
@@ -86,9 +100,9 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MOSSY MAYHEM LIVE"
+                android:text="MOSSY MAYHEM LIVE • V0.3 SCENE BRAIN"
                 android:textColor="@color/cream"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
 
             <TextView
