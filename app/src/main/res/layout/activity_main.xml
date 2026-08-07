@@ -33,7 +33,7 @@
             android:paddingTop="8dp"
             android:paddingEnd="16dp"
             android:paddingBottom="8dp"
-            android:text="V0.4 • GEMINI LIVE DOCUMENTARY"
+            android:text="V0.4.2 • GEMINI CONNECTION TEST"
             android:textColor="@color/moss_lime"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -111,7 +111,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MOSSY MAYHEM LIVE • V0.4 DOCUMENTARY"
+                android:text="MOSSY MAYHEM • V0.4.2 CONNECTION TEST"
                 android:textColor="@color/cream"
                 android:textSize="18sp"
                 android:textStyle="bold" />
