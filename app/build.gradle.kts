@@ -11,13 +11,18 @@ android {
         applicationId = "com.mossy.mayhemlive"
         minSdk = 23
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
