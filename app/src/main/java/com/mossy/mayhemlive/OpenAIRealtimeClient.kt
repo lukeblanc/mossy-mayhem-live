@@ -6,17 +6,22 @@ import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class OpenAIRealtimeClient(
-    private val apiKey: String,
     private val listener: Listener
 ) {
     interface Listener {
@@ -27,6 +32,7 @@ class OpenAIRealtimeClient(
     }
 
     private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
         .build()
@@ -51,22 +57,71 @@ class OpenAIRealtimeClient(
         generating = false
         transcript = StringBuilder()
 
+        listener.onStatus("Getting secure Mossy token…")
+        requestShortLivedToken()
+    }
+
+    private fun requestShortLivedToken() {
+        val body = "{}".toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url("wss://api.openai.com/v1/realtime?model=$MODEL")
-            .addHeader("Authorization", "Bearer ${apiKey.trim()}")
+            .url(TOKEN_URL)
+            .post(body)
+            .addHeader("Accept", "application/json")
+            .addHeader("X-Client-Version", "android-v0.6")
             .build()
 
-        listener.onStatus("Connecting to OpenAI Realtime…")
+        httpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (!closing) {
+                    reportFailure("Mossy backend could not be reached: ${e.message ?: "network error"}")
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val raw = it.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(raw) }.getOrNull()
+
+                    if (!it.isSuccessful) {
+                        val code = json?.optString("error").orEmpty()
+                        val message = json?.optString("message").orEmpty()
+                        val detail = listOf(code, message)
+                            .filter { value -> value.isNotBlank() }
+                            .joinToString(" — ")
+                        reportFailure(
+                            if (detail.isBlank()) "Mossy backend returned HTTP ${it.code}."
+                            else detail
+                        )
+                        return
+                    }
+
+                    val token = json?.optString("client_secret").orEmpty()
+                    val model = json?.optString("model").orEmpty().ifBlank { DEFAULT_MODEL }
+                    if (token.isBlank()) {
+                        reportFailure("Mossy backend returned no short-lived OpenAI token.")
+                        return
+                    }
+
+                    listener.onStatus("Secure token received — connecting OpenAI…")
+                    openRealtimeSocket(token, model)
+                }
+            }
+        })
+    }
+
+    private fun openRealtimeSocket(clientSecret: String, model: String) {
+        val encodedModel = URLEncoder.encode(model, Charsets.UTF_8.name())
+        val request = Request.Builder()
+            .url("wss://api.openai.com/v1/realtime?model=$encodedModel")
+            .addHeader("Authorization", "Bearer $clientSecret")
+            .build()
 
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 listener.onStatus("OpenAI socket open — starting Mossy…")
                 mainHandler.postDelayed({
                     if (!ready && !closing) {
-                        reportFailure(
-                            "OpenAI did not finish session setup within 15 seconds. " +
-                                "Check the exact error shown here before changing the key."
-                        )
+                        reportFailure("OpenAI connected but did not create the Realtime session within 15 seconds.")
                     }
                 }, SETUP_TIMEOUT_MS)
             }
@@ -139,12 +194,9 @@ class OpenAIRealtimeClient(
         if (!isReady || generating) return false
 
         val instruction = if (firstTurn) {
-            "BEGIN_DOCUMENTARY. Start the continuous Mossy documentary from the recent camera frames. " +
-                "Describe this moment as a connected scene, not as a list of objects. Keep it to one or two short sentences."
+            "BEGIN_DOCUMENTARY. Start the continuous Mossy documentary from the recent camera frames. Describe this moment as a connected scene, not as a list of objects. Keep it to one or two short sentences."
         } else {
-            "CONTINUE_DOCUMENTARY. Continue the SAME documentary from the newest camera frames. " +
-                "Say what changed, where we seem to be moving, or what is happening now. Refer back naturally when useful. " +
-                "Do not restart or list objects. One or two short sentences."
+            "CONTINUE_DOCUMENTARY. Continue the SAME documentary from the newest camera frames. Say what changed, where we seem to be moving, or what is happening now. Refer back naturally when useful. Do not restart or list objects. One or two short sentences."
         }
 
         val inputEvent = JSONObject()
@@ -173,8 +225,7 @@ class OpenAIRealtimeClient(
             .put("type", "response.create")
             .put(
                 "response",
-                JSONObject()
-                    .put("output_modalities", JSONArray().put("audio"))
+                JSONObject().put("output_modalities", JSONArray().put("audio"))
             )
 
         val sent = webSocket?.send(responseEvent.toString()) == true
@@ -193,51 +244,21 @@ class OpenAIRealtimeClient(
         httpClient.dispatcher.executorService.shutdown()
     }
 
-    private fun sendSessionUpdate(): Boolean {
-        val session = JSONObject()
-            .put("type", "realtime")
-            .put("model", MODEL)
-            .put("output_modalities", JSONArray().put("audio"))
-            .put(
-                "audio",
-                JSONObject().put(
-                    "output",
-                    JSONObject()
-                        .put("format", JSONObject().put("type", "audio/pcm"))
-                        .put("voice", VOICE)
-                )
-            )
-            .put("instructions", SYSTEM_PROMPT)
-
-        val event = JSONObject()
-            .put("type", "session.update")
-            .put("session", session)
-
-        return webSocket?.send(event.toString()) == true
-    }
-
     private fun handleMessage(raw: String) {
         try {
             val event = JSONObject(raw)
             when (val type = event.optString("type")) {
-                "session.created" -> {
-                    listener.onStatus("OpenAI session created — loading Mossy character…")
-                    if (!sendSessionUpdate()) {
-                        reportFailure("OpenAI connected, but Mossy's session settings could not be sent.")
+                "session.created", "session.updated" -> {
+                    if (!ready) {
+                        ready = true
+                        generating = false
+                        failureReported = false
+                        mainHandler.removeCallbacksAndMessages(null)
+                        listener.onReady()
                     }
                 }
 
-                "session.updated" -> {
-                    ready = true
-                    generating = false
-                    failureReported = false
-                    mainHandler.removeCallbacksAndMessages(null)
-                    listener.onReady()
-                }
-
-                "response.created" -> {
-                    transcript = StringBuilder()
-                }
+                "response.created" -> transcript = StringBuilder()
 
                 "response.output_audio.delta" -> {
                     val delta = event.optString("delta")
@@ -265,8 +286,9 @@ class OpenAIRealtimeClient(
                     val status = response?.optString("status").orEmpty()
                     if (status == "failed") {
                         val details = response?.optJSONObject("status_details")
+                        val error = details?.optJSONObject("error")
                         reportFailure(
-                            details?.optString("error")
+                            error?.optString("message")
                                 ?.takeIf { it.isNotBlank() }
                                 ?: "OpenAI returned a failed response."
                         )
@@ -305,33 +327,9 @@ class OpenAIRealtimeClient(
     }
 
     companion object {
-        private const val MODEL = "gpt-realtime-2.1"
-        private const val VOICE = "cedar"
+        private const val TOKEN_URL = "https://mossy-mayhem-live-api.lovable.app/api/public/realtime-token"
+        private const val DEFAULT_MODEL = "gpt-realtime"
         private const val SETUP_TIMEOUT_MS = 15_000L
-
-        private val SYSTEM_PROMPT = """
-            You are MOSSY, the voice of Mossy Mayhem Live.
-
-            Your job is to narrate the user's moving phone-camera journey as ONE CONTINUOUS COMEDY DOCUMENTARY. Camera images arrive as sequential moments from the same outing. Keep track of what has already happened in this session and connect each new moment to the last.
-
-            VOICE AND STYLE:
-            - Speak in relaxed Australian English with a mature, dry, cheeky documentary delivery.
-            - Sound like a bush-documentary narrator who has tagged along for the walk and is quietly amused by ordinary life.
-            - Be observational and story-driven, not loud, random, or a joke machine.
-            - Keep each narration burst to one or two short sentences so the real scene has room to breathe.
-            - Use Australian turns of phrase naturally, not in every sentence.
-
-            CONTINUITY:
-            - Never behave like an object detector and never list labels.
-            - Never say "detected" and avoid robotic phrases like "I see a car".
-            - Describe movement, setting, relationships, actions, entrances, exits, and changes across the recent camera images.
-            - If something appears again later, call back to it naturally when that improves the story.
-            - If the camera is moving through a place, narrate the journey through that place rather than restarting at every image.
-            - If an image is uncertain, stay general or make a gentle observational joke instead of inventing a precise fact.
-            - Never infer a person's identity, private information, crime, diagnosis, protected trait, or other sensitive fact from appearance.
-
-            Only speak when the app sends BEGIN_DOCUMENTARY or CONTINUE_DOCUMENTARY. Camera-image messages between those prompts are silent context. The goal is for the user to feel that Mossy is travelling with them and turning ordinary life into a funny little documentary worth recording and sharing.
-        """.trimIndent()
     }
 }
 
