@@ -33,7 +33,7 @@
             android:paddingTop="8dp"
             android:paddingEnd="16dp"
             android:paddingBottom="8dp"
-            android:text="V0.4.2 • GEMINI CONNECTION TEST"
+            android:text="V0.5 • OPENAI DOCUMENTARY TEST"
             android:textColor="@color/moss_lime"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -48,12 +48,12 @@
             android:textStyle="italic" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/geminiSetupButton"
+            android:id="@+id/openAISetupButton"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="38dp"
-            android:text="GEMINI SETUP • DEV TEST"
+            android:text="OPENAI SETUP • DEV TEST"
             android:textColor="@color/cream"
             app:cornerRadius="18dp"
             app:strokeColor="@color/moss_lime" />
@@ -79,7 +79,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:gravity="center"
-            android:text="Developer test: selected camera frames are sent to Gemini Live for documentary narration.\nYour Gemini key is not built into this APK."
+            android:text="Developer test: selected camera frames are sent to OpenAI Realtime for documentary narration.\nYour OpenAI key is not built into this APK or GitHub."
             android:textColor="#CCFFFFFF"
             android:textSize="13sp" />
     </LinearLayout>
@@ -111,7 +111,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MOSSY MAYHEM • V0.4.2 CONNECTION TEST"
+                android:text="MOSSY MAYHEM • V0.5 OPENAI REALTIME"
                 android:textColor="@color/cream"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -121,7 +121,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Connecting documentary brain…"
+                android:text="Connecting OpenAI documentary brain…"
                 android:textColor="@color/moss_lime"
                 android:textSize="13sp" />
         </LinearLayout>
