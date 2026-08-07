@@ -3,6 +3,7 @@ package com.mossy.mayhemlive
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
@@ -30,6 +31,7 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.google.android.material.button.MaterialButton
 import com.mossy.mayhemlive.databinding.ActivityMainBinding
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -39,6 +41,11 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
+
+    private enum class ComedyMode(val apiValue: String, val badge: String) {
+        FUNNY("funny", "FUNNY"),
+        UNHINGED("unhinged", "UNHINGED 18+")
+    }
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
@@ -52,6 +59,8 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private var cameraRunning = false
     private var soundEnabled = true
+    private var commentaryPaused = false
+    private var comedyMode = ComedyMode.FUNNY
     private var lastFrameAt = 0L
     private var framesSent = 0
     private var firstNarration = true
@@ -69,7 +78,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private val narrationRunnable = object : Runnable {
         override fun run() {
-            if (!cameraRunning) return
+            if (!cameraRunning || commentaryPaused) return
 
             val client = openAIClient
             if (framesSent >= 2 && client?.isReady == true) {
@@ -88,11 +97,49 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        binding.funnyModeButton.setOnClickListener { selectComedyMode(ComedyMode.FUNNY) }
+        binding.unhingedModeButton.setOnClickListener { selectComedyMode(ComedyMode.UNHINGED) }
         binding.startButton.setOnClickListener { requestPermissionsAndStart() }
         binding.recordButton.setOnClickListener { toggleRecording() }
         binding.flipButton.setOnClickListener { flipCamera() }
         binding.muteButton.setOnClickListener { toggleSound() }
         binding.shareButton.setOnClickListener { shareLastVideo() }
+        binding.pauseButton.setOnClickListener { toggleMossyPause() }
+
+        updateModeButtons()
+    }
+
+    private fun selectComedyMode(mode: ComedyMode) {
+        comedyMode = mode
+        updateModeButtons()
+    }
+
+    private fun updateModeButtons() {
+        styleModeButton(binding.funnyModeButton, comedyMode == ComedyMode.FUNNY, false)
+        styleModeButton(binding.unhingedModeButton, comedyMode == ComedyMode.UNHINGED, true)
+
+        binding.funnyModeButton.text = if (comedyMode == ComedyMode.FUNNY) "✓ FUNNY" else "FUNNY"
+        binding.unhingedModeButton.text = if (comedyMode == ComedyMode.UNHINGED) "✓ UNHINGED 18+" else "UNHINGED 18+"
+        binding.modeHint.text = if (comedyMode == ComedyMode.FUNNY) {
+            "Cheeky documentary comedy • mild language"
+        } else {
+            "Strong language • savage roast mode • 18+"
+        }
+    }
+
+    private fun styleModeButton(button: MaterialButton, selected: Boolean, adult: Boolean) {
+        val background = when {
+            selected && adult -> R.color.record_red
+            selected -> R.color.moss_lime
+            else -> R.color.control_surface
+        }
+        val textColor = if (selected) R.color.moss_black else R.color.cream
+        val strokeColor = if (adult) R.color.record_red else R.color.moss_lime
+
+        button.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, background))
+        button.setTextColor(ContextCompat.getColor(this, textColor))
+        button.strokeColor = ColorStateList.valueOf(ContextCompat.getColor(this, strokeColor))
+        button.strokeWidth = if (selected) 2 else 1
     }
 
     private fun requestPermissionsAndStart() {
@@ -113,10 +160,17 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     private fun showCameraAndStart() {
         binding.welcomePanel.visibility = View.GONE
         binding.cameraPanel.visibility = View.VISIBLE
-        binding.commentaryText.text = "Mossy is joining the walk…"
+        binding.commentaryText.text = if (comedyMode == ComedyMode.UNHINGED) {
+            "Unhinged Mossy is joining the walk…"
+        } else {
+            "Mossy is joining the walk…"
+        }
         binding.statusText.text = "Starting secure documentary mode…"
+        binding.modeBadgeText.text = comedyMode.badge
+        binding.pauseButton.text = "PAUSE MOSSY"
 
         cameraRunning = true
+        commentaryPaused = false
         framesSent = 0
         firstNarration = true
         lastFrameAt = 0L
@@ -127,7 +181,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private fun startOpenAIDocumentary() {
         openAIClient?.close()
-        openAIClient = OpenAIRealtimeClient(this).also { client ->
+        openAIClient = OpenAIRealtimeClient(comedyMode.apiValue, this).also { client ->
             client.setMuted(!soundEnabled)
             client.connect()
         }
@@ -159,6 +213,11 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                 .build()
                 .also { analysis ->
                     analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                        if (commentaryPaused) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+
                         val now = SystemClock.elapsedRealtime()
                         if (now - lastFrameAt < FRAME_INTERVAL_MS) {
                             imageProxy.close()
@@ -179,7 +238,9 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                                 framesSent += 1
                                 if (framesSent % 4 == 0) {
                                     runOnUiThread {
-                                        binding.statusText.text = "MOSSY LIVE • watching the journey"
+                                        if (!commentaryPaused) {
+                                            binding.statusText.text = "${comedyMode.badge} • Mossy is watching"
+                                        }
                                     }
                                 }
                             }
@@ -189,7 +250,9 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                             source.recycle()
                         } catch (_: Exception) {
                             runOnUiThread {
-                                binding.statusText.text = "Camera live — preparing the next scene"
+                                if (!commentaryPaused) {
+                                    binding.statusText.text = "Camera live — preparing the next scene"
+                                }
                             }
                         } finally {
                             imageProxy.close()
@@ -206,7 +269,9 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     imageAnalysis,
                     videoCapture
                 )
-                binding.statusText.text = "Camera live — connecting secure Mossy brain"
+                if (!commentaryPaused) {
+                    binding.statusText.text = "Camera live — connecting secure Mossy brain"
+                }
             } catch (error: Exception) {
                 binding.statusText.text = "Camera could not start"
                 Toast.makeText(this, error.message ?: "Camera error", Toast.LENGTH_LONG).show()
@@ -231,7 +296,12 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     override fun onReady() {
         runOnUiThread {
-            binding.statusText.text = "MOSSY LIVE • DOCUMENTARY BRAIN CONNECTED"
+            if (commentaryPaused) {
+                binding.statusText.text = "MOSSY PAUSED • camera and recording stay live"
+                return@runOnUiThread
+            }
+
+            binding.statusText.text = "${comedyMode.badge} • DOCUMENTARY BRAIN CONNECTED"
             binding.commentaryText.text = "Connected. Give Mossy a few seconds to watch before he starts the story."
             narrationHandler.removeCallbacks(narrationRunnable)
             narrationHandler.postDelayed(narrationRunnable, 4_000L)
@@ -239,11 +309,15 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     }
 
     override fun onStatus(message: String) {
-        runOnUiThread { binding.statusText.text = message }
+        runOnUiThread {
+            if (!commentaryPaused) binding.statusText.text = message
+        }
     }
 
     override fun onTranscript(text: String) {
-        runOnUiThread { binding.commentaryText.text = text }
+        runOnUiThread {
+            if (!commentaryPaused) binding.commentaryText.text = text
+        }
     }
 
     override fun onFailure(message: String) {
@@ -266,6 +340,25 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     .setOnCancelListener { connectionErrorDialogShowing = false }
                     .show()
             }
+        }
+    }
+
+    private fun toggleMossyPause() {
+        commentaryPaused = !commentaryPaused
+
+        if (commentaryPaused) {
+            narrationHandler.removeCallbacks(narrationRunnable)
+            openAIClient?.pauseNarration()
+            binding.pauseButton.text = "RESUME MOSSY"
+            binding.statusText.text = "MOSSY PAUSED • no AI frames being sent"
+            binding.commentaryText.text = "Mossy is paused. Camera and recording can keep rolling."
+        } else {
+            framesSent = 0
+            lastFrameAt = 0L
+            openAIClient?.resumeNarration(soundEnabled)
+            binding.pauseButton.text = "PAUSE MOSSY"
+            binding.statusText.text = "${comedyMode.badge} • Mossy is watching again"
+            narrationHandler.postDelayed(narrationRunnable, 3_000L)
         }
     }
 
@@ -350,7 +443,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     private fun toggleSound() {
         soundEnabled = !soundEnabled
         binding.muteButton.setText(if (soundEnabled) R.string.mute else R.string.unmute)
-        openAIClient?.setMuted(!soundEnabled)
+        openAIClient?.setMuted(commentaryPaused || !soundEnabled)
         Toast.makeText(
             this,
             if (soundEnabled) "Mossy's back on the documentary mic." else "Mossy's watching silently.",
