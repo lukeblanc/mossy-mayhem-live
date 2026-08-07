@@ -33,7 +33,7 @@
             android:paddingTop="8dp"
             android:paddingEnd="16dp"
             android:paddingBottom="8dp"
-            android:text="V0.3 • SCENE BRAIN TEST"
+            android:text="V0.4 • GEMINI LIVE DOCUMENTARY"
             android:textColor="@color/moss_lime"
             android:textSize="16sp"
             android:textStyle="bold" />
@@ -48,11 +48,22 @@
             android:textStyle="italic" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/geminiSetupButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="38dp"
+            android:text="GEMINI SETUP • DEV TEST"
+            android:textColor="@color/cream"
+            app:cornerRadius="18dp"
+            app:strokeColor="@color/moss_lime" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/startButton"
             android:layout_width="match_parent"
             android:layout_height="72dp"
-            android:layout_marginTop="54dp"
-            android:text="@string/start_camera"
+            android:layout_marginTop="12dp"
+            android:text="WELCOME — START DOCUMENTARY"
             android:textSize="18sp"
             android:textStyle="bold"
             app:backgroundTint="@color/moss_lime"
@@ -66,11 +77,11 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="20dp"
             android:gravity="center"
-            android:text="Funny commentary happens on your phone.\nNo camera footage is uploaded."
+            android:text="Developer test: selected camera frames are sent to Gemini Live for documentary narration.\nYour Gemini key is not built into this APK."
             android:textColor="#CCFFFFFF"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 
     <FrameLayout
@@ -100,7 +111,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="MOSSY MAYHEM LIVE • V0.3 SCENE BRAIN"
+                android:text="MOSSY MAYHEM LIVE • V0.4 DOCUMENTARY"
                 android:textColor="@color/cream"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -110,7 +121,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Looking for something funny…"
+                android:text="Connecting documentary brain…"
                 android:textColor="@color/moss_lime"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -129,7 +140,8 @@
                 android:background="@drawable/glass_background"
                 android:gravity="center"
                 android:minHeight="88dp"
-                android:text="Point the camera at something. Mossy is warming up."
+                android:padding="12dp"
+                android:text="Mossy is joining the walk…"
                 android:textColor="@color/cream"
                 android:textSize="19sp"
                 android:textStyle="bold" />
