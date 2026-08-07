@@ -13,9 +13,9 @@
         android:gravity="center_horizontal"
         android:orientation="vertical"
         android:paddingStart="24dp"
-        android:paddingTop="42dp"
+        android:paddingTop="28dp"
         android:paddingEnd="24dp"
-        android:paddingBottom="26dp">
+        android:paddingBottom="22dp">
 
         <TextView
             android:layout_width="wrap_content"
@@ -24,79 +24,78 @@
             android:letterSpacing="0.06"
             android:text="MOSSY\nMAYHEM"
             android:textColor="@color/cream"
-            android:textSize="42sp"
+            android:textSize="38sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="0dp"
             android:text="LIVE"
             android:textColor="@color/moss_lime"
-            android:textSize="34sp"
+            android:textSize="30sp"
             android:textStyle="bold|italic" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="6dp"
             android:text="@string/tagline"
             android:textColor="@color/moss_lime"
-            android:textSize="19sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="7dp"
             android:gravity="center"
             android:text="Live documentary commentary for everyday chaos"
             android:textColor="@color/muted_cream"
-            android:textSize="14sp" />
+            android:textSize="13sp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="17dp"
             android:letterSpacing="0.08"
-            android:text="CHOOSE COMEDY MODE"
+            android:text="COMEDY MODE"
             android:textColor="@color/cream"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/funnyModeButton"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="50dp"
                 android:layout_marginEnd="5dp"
                 android:layout_weight="1"
                 android:text="FUNNY"
                 android:textColor="@color/moss_black"
-                android:textSize="14sp"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 app:backgroundTint="@color/moss_lime"
-                app:cornerRadius="18dp"
+                app:cornerRadius="17dp"
                 app:strokeColor="@color/moss_lime"
                 app:strokeWidth="2dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/unhingedModeButton"
                 android:layout_width="0dp"
-                android:layout_height="54dp"
+                android:layout_height="50dp"
                 android:layout_marginStart="5dp"
                 android:layout_weight="1"
                 android:text="UNHINGED 18+"
                 android:textColor="@color/cream"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 app:backgroundTint="@color/control_surface"
-                app:cornerRadius="18dp"
+                app:cornerRadius="17dp"
                 app:strokeColor="@color/record_red"
                 app:strokeWidth="1dp" />
         </LinearLayout>
@@ -105,11 +104,68 @@
             android:id="@+id/modeHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="7dp"
+            android:layout_marginTop="5dp"
             android:gravity="center"
             android:text="Cheeky documentary comedy • mild language"
             android:textColor="@color/muted_cream"
-            android:textSize="11sp" />
+            android:textSize="10sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:letterSpacing="0.08"
+            android:text="BUSINESS TEST • AI ENGINE"
+            android:textColor="@color/cream"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/fullQualityButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginEnd="5dp"
+                android:layout_weight="1"
+                android:text="FULL"
+                android:textColor="@color/cream"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/control_surface"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/moss_lime"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/lowCostButton"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_marginStart="5dp"
+                android:layout_weight="1"
+                android:text="✓ LOW COST"
+                android:textColor="@color/moss_black"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                app:backgroundTint="@color/moss_lime"
+                app:cornerRadius="16dp"
+                app:strokeColor="@color/moss_lime"
+                app:strokeWidth="2dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/qualityHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:gravity="center"
+            android:text="Business test • cheaper Mini model"
+            android:textColor="@color/muted_cream"
+            android:textSize="10sp" />
 
         <Space
             android:layout_width="1dp"
@@ -119,36 +175,36 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/startButton"
             android:layout_width="match_parent"
-            android:layout_height="70dp"
+            android:layout_height="66dp"
             android:text="START DOCUMENTARY"
             android:textColor="@color/moss_black"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
             app:backgroundTint="@color/moss_lime"
-            app:cornerRadius="24dp"
+            app:cornerRadius="22dp"
             app:icon="@android:drawable/ic_menu_camera"
             app:iconGravity="textStart"
-            app:iconPadding="12dp"
+            app:iconPadding="10dp"
             app:iconTint="@color/moss_black" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
+            android:layout_marginTop="10dp"
             android:gravity="center"
-            android:text="Record • Pause Mossy • Share"
+            android:text="Record • Pause Mossy • Share • Live cost meter"
             android:textColor="@color/cream"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:gravity="center"
             android:text="Secure backend • no API key on this phone"
             android:textColor="#BFFFFFFF"
-            android:textSize="11sp" />
+            android:textSize="10sp" />
     </LinearLayout>
 
     <FrameLayout
@@ -176,49 +232,85 @@
 
             <TextView
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="46dp"
                 android:background="@drawable/top_title_background"
                 android:gravity="center"
                 android:letterSpacing="0.04"
                 android:text="MOSSY MAYHEM  LIVE"
                 android:textColor="@color/cream"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="7dp"
                 android:orientation="horizontal">
 
                 <TextView
                     android:id="@+id/statusText"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="38dp"
                     android:layout_weight="1"
                     android:background="@drawable/status_pill_background"
                     android:ellipsize="end"
                     android:gravity="center_vertical"
                     android:maxLines="1"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
                     android:text="Connecting Mossy brain…"
                     android:textColor="@color/cream"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/modeBadgeText"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="7dp"
                     android:background="@drawable/status_pill_background"
                     android:gravity="center"
-                    android:minWidth="82dp"
-                    android:paddingStart="10dp"
-                    android:paddingEnd="10dp"
+                    android:minWidth="76dp"
+                    android:paddingStart="9dp"
+                    android:paddingEnd="9dp"
                     android:text="FUNNY"
                     android:textColor="@color/moss_lime"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/qualityBadgeText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/status_pill_background"
+                    android:gravity="center"
+                    android:minWidth="92dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="LOW COST"
+                    android:textColor="@color/moss_lime"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/costText"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/status_pill_background"
+                    android:gravity="center"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="AI US$0.000"
+                    android:textColor="@color/cream"
                     android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -239,14 +331,14 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/commentary_background"
                 android:gravity="center_vertical"
-                android:minHeight="88dp"
+                android:minHeight="84dp"
                 android:paddingStart="18dp"
-                android:paddingTop="12dp"
+                android:paddingTop="11dp"
                 android:paddingEnd="18dp"
-                android:paddingBottom="12dp"
+                android:paddingBottom="11dp"
                 android:text="Mossy is joining the walk…"
                 android:textColor="@color/cream"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <LinearLayout
@@ -265,7 +357,7 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/recordButton"
                         android:layout_width="0dp"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:layout_margin="4dp"
                         android:layout_weight="1"
                         android:text="@string/record"
@@ -280,7 +372,7 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/flipButton"
                         android:layout_width="0dp"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:layout_margin="4dp"
                         android:layout_weight="1"
                         android:text="@string/flip"
@@ -301,7 +393,7 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/muteButton"
                         android:layout_width="0dp"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:layout_margin="4dp"
                         android:layout_weight="1"
                         android:text="@string/mute"
@@ -316,7 +408,7 @@
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/shareButton"
                         android:layout_width="0dp"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:layout_margin="4dp"
                         android:layout_weight="1"
                         android:enabled="false"
@@ -333,7 +425,7 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/pauseButton"
                     android:layout_width="match_parent"
-                    android:layout_height="54dp"
+                    android:layout_height="52dp"
                     android:layout_margin="4dp"
                     android:text="PAUSE MOSSY"
                     android:textColor="@color/moss_black"
