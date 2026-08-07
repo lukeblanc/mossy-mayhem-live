@@ -22,6 +22,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class OpenAIRealtimeClient(
+    private val comedyMode: String,
     private val listener: Listener
 ) {
     interface Listener {
@@ -62,12 +63,16 @@ class OpenAIRealtimeClient(
     }
 
     private fun requestShortLivedToken() {
-        val body = "{}".toRequestBody("application/json".toMediaType())
+        val payload = JSONObject()
+            .put("mode", comedyMode)
+            .toString()
+            .toRequestBody("application/json".toMediaType())
+
         val request = Request.Builder()
             .url(TOKEN_URL)
-            .post(body)
+            .post(payload)
             .addHeader("Accept", "application/json")
-            .addHeader("X-Client-Version", "android-v0.6")
+            .addHeader("X-Client-Version", "android-v0.8")
             .build()
 
         httpClient.newCall(request).enqueue(object : Callback {
@@ -97,12 +102,13 @@ class OpenAIRealtimeClient(
 
                     val token = json?.optString("client_secret").orEmpty()
                     val model = json?.optString("model").orEmpty().ifBlank { DEFAULT_MODEL }
+                    val confirmedMode = json?.optString("mode").orEmpty().ifBlank { comedyMode }
                     if (token.isBlank()) {
                         reportFailure("Mossy backend returned no short-lived OpenAI token.")
                         return
                     }
 
-                    listener.onStatus("Secure token received — connecting OpenAI…")
+                    listener.onStatus("${confirmedMode.uppercase()} • secure token received")
                     openRealtimeSocket(token, model)
                 }
             }
@@ -165,6 +171,18 @@ class OpenAIRealtimeClient(
 
     fun setMuted(muted: Boolean) {
         audioPlayer.setMuted(muted)
+    }
+
+    fun pauseNarration() {
+        if (generating) {
+            webSocket?.send(JSONObject().put("type", "response.cancel").toString())
+            generating = false
+        }
+        audioPlayer.setMuted(true)
+    }
+
+    fun resumeNarration(soundEnabled: Boolean) {
+        audioPlayer.setMuted(!soundEnabled)
     }
 
     fun sendImageFrame(jpegBytes: ByteArray): Boolean {
