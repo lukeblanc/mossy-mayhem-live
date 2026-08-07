@@ -40,15 +40,15 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
+class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
 
-    private val prefs by lazy { getSharedPreferences("mossy_dev", MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences("mossy_openai_dev", MODE_PRIVATE) }
     private val narrationHandler = Handler(Looper.getMainLooper())
 
-    private var geminiClient: GeminiLiveClient? = null
+    private var openAIClient: OpenAIRealtimeClient? = null
     private var cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     private var videoCapture: VideoCapture<Recorder>? = null
     private var activeRecording: Recording? = null
@@ -75,8 +75,8 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         override fun run() {
             if (!cameraRunning) return
 
-            val client = geminiClient
-            if (framesSent >= 3 && client?.isReady == true) {
+            val client = openAIClient
+            if (framesSent >= 2 && client?.isReady == true) {
                 val sent = client.requestNarration(firstTurn = firstNarration)
                 if (sent) firstNarration = false
             }
@@ -92,38 +92,38 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        binding.startButton.setOnClickListener { ensureGeminiKeyThenStart() }
-        binding.geminiSetupButton.setOnClickListener { showGeminiKeyDialog() }
+        binding.startButton.setOnClickListener { ensureOpenAIKeyThenStart() }
+        binding.openAISetupButton.setOnClickListener { showOpenAIKeyDialog() }
         binding.recordButton.setOnClickListener { toggleRecording() }
         binding.flipButton.setOnClickListener { flipCamera() }
         binding.muteButton.setOnClickListener { toggleSound() }
         binding.shareButton.setOnClickListener { shareLastVideo() }
     }
 
-    private fun ensureGeminiKeyThenStart() {
-        val key = savedGeminiKey()
+    private fun ensureOpenAIKeyThenStart() {
+        val key = savedOpenAIKey()
         if (key.isBlank()) {
-            showGeminiKeyDialog { requestPermissionsAndStart() }
+            showOpenAIKeyDialog { requestPermissionsAndStart() }
         } else {
             requestPermissionsAndStart()
         }
     }
 
-    private fun showGeminiKeyDialog(onSaved: (() -> Unit)? = null) {
+    private fun showOpenAIKeyDialog(onSaved: (() -> Unit)? = null) {
         val input = EditText(this).apply {
-            hint = "Paste Gemini API key"
+            hint = "Paste OpenAI API key"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
             setPadding(48, 24, 48, 12)
-            setText(savedGeminiKey())
+            setText(savedOpenAIKey())
             setSelection(text.length)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Gemini Live setup — developer test")
+            .setTitle("OpenAI Realtime setup — developer test")
             .setMessage(
-                "For v0.4 only, your Gemini API key is stored on this phone and is not built into the APK or GitHub. " +
-                    "The public Play Store version will use short-lived secure tokens instead."
+                "For v0.5 only, your OpenAI API key is stored in this app on this phone and is not built into the APK or GitHub. " +
+                    "The public Play Store version will use short-lived secure client tokens instead."
             )
             .setView(input)
             .setPositiveButton("SAVE") { _, _ ->
@@ -131,20 +131,20 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
                 if (key.isBlank()) {
                     Toast.makeText(this, "No key saved.", Toast.LENGTH_SHORT).show()
                 } else {
-                    prefs.edit().putString(KEY_GEMINI_API, key).apply()
-                    Toast.makeText(this, "Gemini key saved on this phone.", Toast.LENGTH_SHORT).show()
+                    prefs.edit().putString(KEY_OPENAI_API, key).apply()
+                    Toast.makeText(this, "OpenAI key saved on this phone.", Toast.LENGTH_SHORT).show()
                     onSaved?.invoke()
                 }
             }
             .setNeutralButton("CLEAR") { _, _ ->
-                prefs.edit().remove(KEY_GEMINI_API).apply()
-                Toast.makeText(this, "Gemini key cleared.", Toast.LENGTH_SHORT).show()
+                prefs.edit().remove(KEY_OPENAI_API).apply()
+                Toast.makeText(this, "OpenAI key cleared.", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("CANCEL", null)
             .show()
     }
 
-    private fun savedGeminiKey(): String = prefs.getString(KEY_GEMINI_API, "").orEmpty()
+    private fun savedOpenAIKey(): String = prefs.getString(KEY_OPENAI_API, "").orEmpty()
 
     private fun requestPermissionsAndStart() {
         val cameraGranted = ContextCompat.checkSelfPermission(
@@ -165,19 +165,20 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         binding.welcomePanel.visibility = View.GONE
         binding.cameraPanel.visibility = View.VISIBLE
         binding.commentaryText.text = "Mossy is joining the walk…"
-        binding.statusText.text = "Starting Gemini Live documentary mode…"
+        binding.statusText.text = "Starting OpenAI Realtime documentary mode…"
 
         cameraRunning = true
         framesSent = 0
         firstNarration = true
+        lastFrameAt = 0L
 
-        startGeminiDocumentary()
+        startOpenAIDocumentary()
         startCamera()
     }
 
-    private fun startGeminiDocumentary() {
-        geminiClient?.close()
-        geminiClient = GeminiLiveClient(savedGeminiKey(), this).also { client ->
+    private fun startOpenAIDocumentary() {
+        openAIClient?.close()
+        openAIClient = OpenAIRealtimeClient(savedOpenAIKey(), this).also { client ->
             client.setMuted(!soundEnabled)
             client.connect()
         }
@@ -219,17 +220,17 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
                         try {
                             val source = imageProxy.toBitmap()
                             val upright = rotateBitmap(source, imageProxy.imageInfo.rotationDegrees)
-                            val scaled = scaleForGemini(upright)
+                            val scaled = scaleForOpenAI(upright)
                             val bytes = ByteArrayOutputStream().use { stream ->
-                                scaled.compress(Bitmap.CompressFormat.JPEG, 58, stream)
+                                scaled.compress(Bitmap.CompressFormat.JPEG, 55, stream)
                                 stream.toByteArray()
                             }
 
-                            if (geminiClient?.sendVideoFrame(bytes) == true) {
+                            if (openAIClient?.sendImageFrame(bytes) == true) {
                                 framesSent += 1
-                                if (framesSent % 5 == 0) {
+                                if (framesSent % 4 == 0) {
                                     runOnUiThread {
-                                        binding.statusText.text = "Documentary live — Mossy is watching the journey"
+                                        binding.statusText.text = "OPENAI REALTIME • Mossy is watching the journey"
                                     }
                                 }
                             }
@@ -239,7 +240,7 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
                             source.recycle()
                         } catch (error: Exception) {
                             runOnUiThread {
-                                binding.statusText.text = "Camera is live — preparing the next frame"
+                                binding.statusText.text = "Camera is live — preparing the next scene"
                             }
                         } finally {
                             imageProxy.close()
@@ -256,7 +257,7 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
                     imageAnalysis,
                     videoCapture
                 )
-                binding.statusText.text = "Camera live — connecting Mossy's documentary brain"
+                binding.statusText.text = "Camera live — connecting OpenAI documentary brain"
             } catch (error: Exception) {
                 binding.statusText.text = "Camera could not start"
                 Toast.makeText(this, error.message ?: "Camera error", Toast.LENGTH_LONG).show()
@@ -270,7 +271,7 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
-    private fun scaleForGemini(source: Bitmap): Bitmap {
+    private fun scaleForOpenAI(source: Bitmap): Bitmap {
         val largest = maxOf(source.width, source.height)
         if (largest <= 640) return source
         val scale = 640f / largest.toFloat()
@@ -281,10 +282,10 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onReady() {
         runOnUiThread {
-            binding.statusText.text = "GEMINI LIVE • DOCUMENTARY BRAIN CONNECTED"
+            binding.statusText.text = "OPENAI REALTIME • DOCUMENTARY BRAIN CONNECTED"
             binding.commentaryText.text = "Connected. Give Mossy a few seconds to watch before he starts the story."
             narrationHandler.removeCallbacks(narrationRunnable)
-            narrationHandler.postDelayed(narrationRunnable, 3_200L)
+            narrationHandler.postDelayed(narrationRunnable, 4_000L)
         }
     }
 
@@ -300,18 +301,20 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
 
     override fun onFailure(message: String) {
         runOnUiThread {
-            binding.statusText.text = "Gemini Live connection failed"
-            binding.commentaryText.text = "Mossy's documentary brain didn't connect. The API key may need checking."
+            binding.statusText.text = "OpenAI Realtime connection failed"
+            binding.commentaryText.text = "Mossy's OpenAI documentary brain didn't connect. Read the exact error below."
 
             if (!connectionErrorDialogShowing && !isFinishing) {
                 connectionErrorDialogShowing = true
                 AlertDialog.Builder(this)
-                    .setTitle("Gemini didn't connect")
-                    .setMessage("Check the Gemini API key for this developer test.\n\n$message")
+                    .setTitle("OpenAI didn't connect")
+                    .setMessage(
+                        "Do not create another key yet. This is the exact OpenAI error:\n\n$message"
+                    )
                     .setPositiveButton("CHANGE KEY") { _, _ ->
                         connectionErrorDialogShowing = false
-                        showGeminiKeyDialog {
-                            startGeminiDocumentary()
+                        showOpenAIKeyDialog {
+                            startOpenAIDocumentary()
                         }
                     }
                     .setNegativeButton("CLOSE") { _, _ ->
@@ -404,7 +407,7 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private fun toggleSound() {
         soundEnabled = !soundEnabled
         binding.muteButton.setText(if (soundEnabled) R.string.mute else R.string.unmute)
-        geminiClient?.setMuted(!soundEnabled)
+        openAIClient?.setMuted(!soundEnabled)
         Toast.makeText(
             this,
             if (soundEnabled) "Mossy's back on the documentary mic." else "Mossy's watching silently.",
@@ -416,14 +419,14 @@ class MainActivity : AppCompatActivity(), GeminiLiveClient.Listener {
         cameraRunning = false
         narrationHandler.removeCallbacksAndMessages(null)
         activeRecording?.stop()
-        geminiClient?.close()
+        openAIClient?.close()
         cameraExecutor.shutdown()
         super.onDestroy()
     }
 
     companion object {
-        private const val KEY_GEMINI_API = "gemini_api_key"
-        private const val FRAME_INTERVAL_MS = 1_000L
+        private const val KEY_OPENAI_API = "openai_api_key"
+        private const val FRAME_INTERVAL_MS = 2_000L
         private const val NARRATION_INTERVAL_MS = 7_000L
     }
 }
