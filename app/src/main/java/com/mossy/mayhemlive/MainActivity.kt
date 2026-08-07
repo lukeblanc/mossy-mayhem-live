@@ -47,6 +47,11 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         UNHINGED("unhinged", "UNHINGED 18+")
     }
 
+    private enum class QualityMode(val apiValue: String, val badge: String) {
+        FULL("full", "FULL"),
+        LOW_COST("low_cost", "LOW COST")
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
     private val narrationHandler = Handler(Looper.getMainLooper())
@@ -61,10 +66,14 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     private var soundEnabled = true
     private var commentaryPaused = false
     private var comedyMode = ComedyMode.FUNNY
+    private var qualityMode = QualityMode.LOW_COST
     private var lastFrameAt = 0L
     private var framesSent = 0
     private var firstNarration = true
     private var connectionErrorDialogShowing = false
+    private var sessionCostUsd = 0.0
+    private var sessionBilledTokens = 0
+    private var sessionModel = ""
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -99,6 +108,8 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
         binding.funnyModeButton.setOnClickListener { selectComedyMode(ComedyMode.FUNNY) }
         binding.unhingedModeButton.setOnClickListener { selectComedyMode(ComedyMode.UNHINGED) }
+        binding.fullQualityButton.setOnClickListener { selectQualityMode(QualityMode.FULL) }
+        binding.lowCostButton.setOnClickListener { selectQualityMode(QualityMode.LOW_COST) }
         binding.startButton.setOnClickListener { requestPermissionsAndStart() }
         binding.recordButton.setOnClickListener { toggleRecording() }
         binding.flipButton.setOnClickListener { flipCamera() }
@@ -107,6 +118,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         binding.pauseButton.setOnClickListener { toggleMossyPause() }
 
         updateModeButtons()
+        updateQualityButtons()
     }
 
     private fun selectComedyMode(mode: ComedyMode) {
@@ -114,20 +126,38 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         updateModeButtons()
     }
 
+    private fun selectQualityMode(mode: QualityMode) {
+        qualityMode = mode
+        updateQualityButtons()
+    }
+
     private fun updateModeButtons() {
-        styleModeButton(binding.funnyModeButton, comedyMode == ComedyMode.FUNNY, false)
-        styleModeButton(binding.unhingedModeButton, comedyMode == ComedyMode.UNHINGED, true)
+        styleChoiceButton(binding.funnyModeButton, comedyMode == ComedyMode.FUNNY, false)
+        styleChoiceButton(binding.unhingedModeButton, comedyMode == ComedyMode.UNHINGED, true)
 
         binding.funnyModeButton.text = if (comedyMode == ComedyMode.FUNNY) "✓ FUNNY" else "FUNNY"
         binding.unhingedModeButton.text = if (comedyMode == ComedyMode.UNHINGED) "✓ UNHINGED 18+" else "UNHINGED 18+"
         binding.modeHint.text = if (comedyMode == ComedyMode.FUNNY) {
             "Cheeky documentary comedy • mild language"
         } else {
-            "Strong language • savage roast mode • 18+"
+            "Strong language • feral documentary roast • 18+"
         }
     }
 
-    private fun styleModeButton(button: MaterialButton, selected: Boolean, adult: Boolean) {
+    private fun updateQualityButtons() {
+        styleChoiceButton(binding.fullQualityButton, qualityMode == QualityMode.FULL, false)
+        styleChoiceButton(binding.lowCostButton, qualityMode == QualityMode.LOW_COST, false)
+
+        binding.fullQualityButton.text = if (qualityMode == QualityMode.FULL) "✓ FULL" else "FULL"
+        binding.lowCostButton.text = if (qualityMode == QualityMode.LOW_COST) "✓ LOW COST" else "LOW COST"
+        binding.qualityHint.text = if (qualityMode == QualityMode.LOW_COST) {
+            "Business test • cheaper Mini model"
+        } else {
+            "Benchmark • full Realtime model"
+        }
+    }
+
+    private fun styleChoiceButton(button: MaterialButton, selected: Boolean, adult: Boolean) {
         val background = when {
             selected && adult -> R.color.record_red
             selected -> R.color.moss_lime
@@ -167,13 +197,18 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         }
         binding.statusText.text = "Starting secure documentary mode…"
         binding.modeBadgeText.text = comedyMode.badge
+        binding.qualityBadgeText.text = qualityMode.badge
         binding.pauseButton.text = "PAUSE MOSSY"
+        binding.costText.text = "AI US$0.000"
 
         cameraRunning = true
         commentaryPaused = false
         framesSent = 0
         firstNarration = true
         lastFrameAt = 0L
+        sessionCostUsd = 0.0
+        sessionBilledTokens = 0
+        sessionModel = ""
 
         startOpenAIDocumentary()
         startCamera()
@@ -181,7 +216,11 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private fun startOpenAIDocumentary() {
         openAIClient?.close()
-        openAIClient = OpenAIRealtimeClient(comedyMode.apiValue, this).also { client ->
+        openAIClient = OpenAIRealtimeClient(
+            comedyMode.apiValue,
+            qualityMode.apiValue,
+            this
+        ).also { client ->
             client.setMuted(!soundEnabled)
             client.connect()
         }
@@ -301,7 +340,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                 return@runOnUiThread
             }
 
-            binding.statusText.text = "${comedyMode.badge} • DOCUMENTARY BRAIN CONNECTED"
+            binding.statusText.text = "${comedyMode.badge} • ${qualityMode.badge} • CONNECTED"
             binding.commentaryText.text = "Connected. Give Mossy a few seconds to watch before he starts the story."
             narrationHandler.removeCallbacks(narrationRunnable)
             narrationHandler.postDelayed(narrationRunnable, 4_000L)
@@ -317,6 +356,15 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     override fun onTranscript(text: String) {
         runOnUiThread {
             if (!commentaryPaused) binding.commentaryText.text = text
+        }
+    }
+
+    override fun onUsageUpdate(costUsd: Double, billedTokens: Int, model: String) {
+        sessionCostUsd = costUsd
+        sessionBilledTokens = billedTokens
+        sessionModel = model
+        runOnUiThread {
+            binding.costText.text = formatCost(costUsd)
         }
     }
 
@@ -367,7 +415,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
             it.stop()
             activeRecording = null
             binding.recordButton.setText(R.string.record)
-            binding.statusText.text = "Saving your documentary…"
+            binding.statusText.text = "Saving • ${formatCost(sessionCostUsd)}"
             return
         }
 
@@ -392,7 +440,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
             when (event) {
                 is VideoRecordEvent.Start -> {
                     binding.recordButton.setText(R.string.stop)
-                    binding.statusText.text = "RECORDING • Mossy documentary live"
+                    binding.statusText.text = "RECORDING • ${qualityMode.badge}"
                 }
 
                 is VideoRecordEvent.Finalize -> {
@@ -401,7 +449,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     if (!event.hasError()) {
                         lastVideoFile = file
                         binding.shareButton.isEnabled = true
-                        binding.statusText.text = "Saved — tap SHARE"
+                        binding.statusText.text = "Saved • ${formatCost(sessionCostUsd)} • SHARE"
                     } else {
                         file.delete()
                         binding.statusText.text = "Recording failed"
@@ -449,6 +497,11 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
             if (soundEnabled) "Mossy's back on the documentary mic." else "Mossy's watching silently.",
             Toast.LENGTH_SHORT
         ).show()
+    }
+
+    private fun formatCost(costUsd: Double): String {
+        val decimals = if (costUsd < 0.01) 4 else 3
+        return "AI US$${String.format(Locale.US, ".${decimals}f", costUsd)}"
     }
 
     override fun onDestroy() {
