@@ -9,10 +9,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.text.InputType
 import android.util.Size
 import android.view.View
-import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -44,8 +42,6 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
-
-    private val prefs by lazy { getSharedPreferences("mossy_openai_dev", MODE_PRIVATE) }
     private val narrationHandler = Handler(Looper.getMainLooper())
 
     private var openAIClient: OpenAIRealtimeClient? = null
@@ -92,59 +88,12 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        binding.startButton.setOnClickListener { ensureOpenAIKeyThenStart() }
-        binding.openAISetupButton.setOnClickListener { showOpenAIKeyDialog() }
+        binding.startButton.setOnClickListener { requestPermissionsAndStart() }
         binding.recordButton.setOnClickListener { toggleRecording() }
         binding.flipButton.setOnClickListener { flipCamera() }
         binding.muteButton.setOnClickListener { toggleSound() }
         binding.shareButton.setOnClickListener { shareLastVideo() }
     }
-
-    private fun ensureOpenAIKeyThenStart() {
-        val key = savedOpenAIKey()
-        if (key.isBlank()) {
-            showOpenAIKeyDialog { requestPermissionsAndStart() }
-        } else {
-            requestPermissionsAndStart()
-        }
-    }
-
-    private fun showOpenAIKeyDialog(onSaved: (() -> Unit)? = null) {
-        val input = EditText(this).apply {
-            hint = "Paste OpenAI API key"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-            setPadding(48, 24, 48, 12)
-            setText(savedOpenAIKey())
-            setSelection(text.length)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("OpenAI Realtime setup — developer test")
-            .setMessage(
-                "For v0.5 only, your OpenAI API key is stored in this app on this phone and is not built into the APK or GitHub. " +
-                    "The public Play Store version will use short-lived secure client tokens instead."
-            )
-            .setView(input)
-            .setPositiveButton("SAVE") { _, _ ->
-                val key = input.text.toString().trim()
-                if (key.isBlank()) {
-                    Toast.makeText(this, "No key saved.", Toast.LENGTH_SHORT).show()
-                } else {
-                    prefs.edit().putString(KEY_OPENAI_API, key).apply()
-                    Toast.makeText(this, "OpenAI key saved on this phone.", Toast.LENGTH_SHORT).show()
-                    onSaved?.invoke()
-                }
-            }
-            .setNeutralButton("CLEAR") { _, _ ->
-                prefs.edit().remove(KEY_OPENAI_API).apply()
-                Toast.makeText(this, "OpenAI key cleared.", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("CANCEL", null)
-            .show()
-    }
-
-    private fun savedOpenAIKey(): String = prefs.getString(KEY_OPENAI_API, "").orEmpty()
 
     private fun requestPermissionsAndStart() {
         val cameraGranted = ContextCompat.checkSelfPermission(
@@ -165,7 +114,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         binding.welcomePanel.visibility = View.GONE
         binding.cameraPanel.visibility = View.VISIBLE
         binding.commentaryText.text = "Mossy is joining the walk…"
-        binding.statusText.text = "Starting OpenAI Realtime documentary mode…"
+        binding.statusText.text = "Starting secure documentary mode…"
 
         cameraRunning = true
         framesSent = 0
@@ -178,7 +127,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private fun startOpenAIDocumentary() {
         openAIClient?.close()
-        openAIClient = OpenAIRealtimeClient(savedOpenAIKey(), this).also { client ->
+        openAIClient = OpenAIRealtimeClient(this).also { client ->
             client.setMuted(!soundEnabled)
             client.connect()
         }
@@ -230,7 +179,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                                 framesSent += 1
                                 if (framesSent % 4 == 0) {
                                     runOnUiThread {
-                                        binding.statusText.text = "OPENAI REALTIME • Mossy is watching the journey"
+                                        binding.statusText.text = "MOSSY LIVE • watching the journey"
                                     }
                                 }
                             }
@@ -238,9 +187,9 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                             if (scaled !== upright) scaled.recycle()
                             if (upright !== source) upright.recycle()
                             source.recycle()
-                        } catch (error: Exception) {
+                        } catch (_: Exception) {
                             runOnUiThread {
-                                binding.statusText.text = "Camera is live — preparing the next scene"
+                                binding.statusText.text = "Camera live — preparing the next scene"
                             }
                         } finally {
                             imageProxy.close()
@@ -257,7 +206,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     imageAnalysis,
                     videoCapture
                 )
-                binding.statusText.text = "Camera live — connecting OpenAI documentary brain"
+                binding.statusText.text = "Camera live — connecting secure Mossy brain"
             } catch (error: Exception) {
                 binding.statusText.text = "Camera could not start"
                 Toast.makeText(this, error.message ?: "Camera error", Toast.LENGTH_LONG).show()
@@ -282,7 +231,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     override fun onReady() {
         runOnUiThread {
-            binding.statusText.text = "OPENAI REALTIME • DOCUMENTARY BRAIN CONNECTED"
+            binding.statusText.text = "MOSSY LIVE • DOCUMENTARY BRAIN CONNECTED"
             binding.commentaryText.text = "Connected. Give Mossy a few seconds to watch before he starts the story."
             narrationHandler.removeCallbacks(narrationRunnable)
             narrationHandler.postDelayed(narrationRunnable, 4_000L)
@@ -294,28 +243,22 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     }
 
     override fun onTranscript(text: String) {
-        runOnUiThread {
-            binding.commentaryText.text = text
-        }
+        runOnUiThread { binding.commentaryText.text = text }
     }
 
     override fun onFailure(message: String) {
         runOnUiThread {
-            binding.statusText.text = "OpenAI Realtime connection failed"
-            binding.commentaryText.text = "Mossy's OpenAI documentary brain didn't connect. Read the exact error below."
+            binding.statusText.text = "Mossy connection failed"
+            binding.commentaryText.text = "Mossy's documentary brain didn't connect."
 
             if (!connectionErrorDialogShowing && !isFinishing) {
                 connectionErrorDialogShowing = true
                 AlertDialog.Builder(this)
-                    .setTitle("OpenAI didn't connect")
-                    .setMessage(
-                        "Do not create another key yet. This is the exact OpenAI error:\n\n$message"
-                    )
-                    .setPositiveButton("CHANGE KEY") { _, _ ->
+                    .setTitle("Mossy didn't connect")
+                    .setMessage(message)
+                    .setPositiveButton("RETRY") { _, _ ->
                         connectionErrorDialogShowing = false
-                        showOpenAIKeyDialog {
-                            startOpenAIDocumentary()
-                        }
+                        startOpenAIDocumentary()
                     }
                     .setNegativeButton("CLOSE") { _, _ ->
                         connectionErrorDialogShowing = false
@@ -425,7 +368,6 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     }
 
     companion object {
-        private const val KEY_OPENAI_API = "openai_api_key"
         private const val FRAME_INTERVAL_MS = 2_000L
         private const val NARRATION_INTERVAL_MS = 7_000L
     }
