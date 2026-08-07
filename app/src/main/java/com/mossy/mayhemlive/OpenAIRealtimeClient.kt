@@ -23,12 +23,14 @@ import java.util.concurrent.TimeUnit
 
 class OpenAIRealtimeClient(
     private val comedyMode: String,
+    private val quality: String,
     private val listener: Listener
 ) {
     interface Listener {
         fun onReady()
         fun onStatus(message: String)
         fun onTranscript(text: String)
+        fun onUsageUpdate(costUsd: Double, billedTokens: Int, model: String)
         fun onFailure(message: String)
     }
 
@@ -47,6 +49,9 @@ class OpenAIRealtimeClient(
     private var closing = false
     private var failureReported = false
     private var transcript = StringBuilder()
+    private var activeModel = DEFAULT_MODEL
+    private var sessionCostUsd = 0.0
+    private var sessionBilledTokens = 0
 
     val isReady: Boolean
         get() = ready && webSocket != null
@@ -57,7 +62,11 @@ class OpenAIRealtimeClient(
         ready = false
         generating = false
         transcript = StringBuilder()
+        activeModel = DEFAULT_MODEL
+        sessionCostUsd = 0.0
+        sessionBilledTokens = 0
 
+        listener.onUsageUpdate(0.0, 0, activeModel)
         listener.onStatus("Getting secure Mossy token…")
         requestShortLivedToken()
     }
@@ -65,6 +74,7 @@ class OpenAIRealtimeClient(
     private fun requestShortLivedToken() {
         val payload = JSONObject()
             .put("mode", comedyMode)
+            .put("quality", quality)
             .toString()
             .toRequestBody("application/json".toMediaType())
 
@@ -72,7 +82,7 @@ class OpenAIRealtimeClient(
             .url(TOKEN_URL)
             .post(payload)
             .addHeader("Accept", "application/json")
-            .addHeader("X-Client-Version", "android-v0.8")
+            .addHeader("X-Client-Version", "android-v0.9")
             .build()
 
         httpClient.newCall(request).enqueue(object : Callback {
@@ -103,12 +113,15 @@ class OpenAIRealtimeClient(
                     val token = json?.optString("client_secret").orEmpty()
                     val model = json?.optString("model").orEmpty().ifBlank { DEFAULT_MODEL }
                     val confirmedMode = json?.optString("mode").orEmpty().ifBlank { comedyMode }
+                    val confirmedQuality = json?.optString("quality").orEmpty().ifBlank { quality }
                     if (token.isBlank()) {
                         reportFailure("Mossy backend returned no short-lived OpenAI token.")
                         return
                     }
 
-                    listener.onStatus("${confirmedMode.uppercase()} • secure token received")
+                    activeModel = model
+                    listener.onUsageUpdate(sessionCostUsd, sessionBilledTokens, activeModel)
+                    listener.onStatus("${confirmedMode.uppercase()} • ${qualityLabel(confirmedQuality)}")
                     openRealtimeSocket(token, model)
                 }
             }
@@ -212,9 +225,9 @@ class OpenAIRealtimeClient(
         if (!isReady || generating) return false
 
         val instruction = if (firstTurn) {
-            "BEGIN_DOCUMENTARY. Start the continuous Mossy documentary from the recent camera frames. Describe this moment as a connected scene, not as a list of objects. Keep it to one or two short sentences."
+            "BEGIN_DOCUMENTARY. Start the continuous Mossy documentary from the recent camera frames. Describe this moment as a connected scene, not as a list of objects. Keep it short and live."
         } else {
-            "CONTINUE_DOCUMENTARY. Continue the SAME documentary from the newest camera frames. Say what changed, where we seem to be moving, or what is happening now. Refer back naturally when useful. Do not restart or list objects. One or two short sentences."
+            "CONTINUE_DOCUMENTARY. Continue the SAME documentary from the newest camera frames. Say what changed, where we seem to be moving, or what is happening now. Refer back naturally when useful. Do not restart or list objects. Keep it short and live."
         }
 
         val inputEvent = JSONObject()
@@ -301,6 +314,8 @@ class OpenAIRealtimeClient(
                 "response.done" -> {
                     generating = false
                     val response = event.optJSONObject("response")
+                    addUsage(response?.optJSONObject("usage"))
+
                     val status = response?.optString("status").orEmpty()
                     if (status == "failed") {
                         val details = response?.optJSONObject("status_details")
@@ -335,6 +350,41 @@ class OpenAIRealtimeClient(
         }
     }
 
+    private fun addUsage(usage: JSONObject?) {
+        if (usage == null) return
+
+        val input = usage.optJSONObject("input_token_details") ?: JSONObject()
+        val cached = input.optJSONObject("cached_tokens_details") ?: JSONObject()
+        val output = usage.optJSONObject("output_token_details") ?: JSONObject()
+
+        val textIn = input.optInt("text_tokens", 0)
+        val imageIn = input.optInt("image_tokens", 0)
+        val audioIn = input.optInt("audio_tokens", 0)
+        val cachedText = cached.optInt("text_tokens", 0).coerceAtMost(textIn)
+        val cachedImage = cached.optInt("image_tokens", 0).coerceAtMost(imageIn)
+        val cachedAudio = cached.optInt("audio_tokens", 0).coerceAtMost(audioIn)
+        val textOut = output.optInt("text_tokens", 0)
+        val audioOut = output.optInt("audio_tokens", 0)
+
+        val rates = if (activeModel.contains("mini", ignoreCase = true)) MINI_RATES else FULL_RATES
+        val cost =
+            (textIn - cachedText) * rates.textInput +
+                cachedText * rates.textCached +
+                (imageIn - cachedImage) * rates.imageInput +
+                cachedImage * rates.imageCached +
+                (audioIn - cachedAudio) * rates.audioInput +
+                cachedAudio * rates.audioCached +
+                textOut * rates.textOutput +
+                audioOut * rates.audioOutput
+
+        sessionCostUsd += cost / 1_000_000.0
+        sessionBilledTokens += usage.optInt("total_tokens", 0)
+        listener.onUsageUpdate(sessionCostUsd, sessionBilledTokens, activeModel)
+    }
+
+    private fun qualityLabel(value: String): String =
+        if (value == "low_cost") "LOW COST" else "FULL QUALITY"
+
     private fun reportFailure(message: String) {
         if (failureReported || closing) return
         failureReported = true
@@ -344,10 +394,44 @@ class OpenAIRealtimeClient(
         listener.onFailure(message)
     }
 
+    private data class Rates(
+        val textInput: Double,
+        val textCached: Double,
+        val imageInput: Double,
+        val imageCached: Double,
+        val audioInput: Double,
+        val audioCached: Double,
+        val textOutput: Double,
+        val audioOutput: Double
+    )
+
     companion object {
         private const val TOKEN_URL = "https://mossy-mayhem-live-api.lovable.app/api/public/realtime-token"
         private const val DEFAULT_MODEL = "gpt-realtime"
         private const val SETUP_TIMEOUT_MS = 15_000L
+
+        // USD per 1M tokens. Current published OpenAI prices as of 2026-08-07.
+        private val FULL_RATES = Rates(
+            textInput = 4.0,
+            textCached = 0.40,
+            imageInput = 5.0,
+            imageCached = 0.50,
+            audioInput = 32.0,
+            audioCached = 0.40,
+            textOutput = 16.0,
+            audioOutput = 64.0
+        )
+
+        private val MINI_RATES = Rates(
+            textInput = 0.60,
+            textCached = 0.06,
+            imageInput = 0.80,
+            imageCached = 0.08,
+            audioInput = 10.0,
+            audioCached = 0.30,
+            textOutput = 2.40,
+            audioOutput = 20.0
+        )
     }
 }
 
