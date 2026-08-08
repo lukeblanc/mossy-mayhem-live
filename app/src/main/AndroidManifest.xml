@@ -12,7 +12,7 @@
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/ic_menu_camera"
-        android:label="Mossy COST TEST v0.9.2"
+        android:label="Mossy Smart Cost v0.10"
         android:supportsRtl="true"
         android:theme="@style/Theme.MossyMayhemLive">
 
