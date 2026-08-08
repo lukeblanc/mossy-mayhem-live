@@ -501,7 +501,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private fun formatCost(costUsd: Double): String {
         val decimals = if (costUsd < 0.01) 4 else 3
-        return "AI US$${String.format(Locale.US, ".${decimals}f", costUsd)}"
+        return "AI US$${String.format(Locale.US, "%.${decimals}f", costUsd)}"
     }
 
     override fun onDestroy() {
