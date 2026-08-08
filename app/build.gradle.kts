@@ -11,16 +11,16 @@ android {
         applicationId = "com.mossy.mayhemlive"
         minSdk = 23
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.9.1"
+        versionCode = 13
+        versionName = "0.9.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         getByName("debug") {
-            // Fresh unmistakable cost-test identity avoids confusion with earlier side-by-side test APKs.
-            applicationIdSuffix = ".costtest91"
+            // Fresh identity avoids Android debug-signing clashes with earlier test APKs.
+            applicationIdSuffix = ".costtest92"
             versionNameSuffix = "-dev"
         }
 
