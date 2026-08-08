@@ -1,0 +1,12 @@
+<resources>
+    <color name="moss_black">#10140F</color>
+    <color name="moss_green">#385C3B</color>
+    <color name="moss_lime">#B7D83D</color>
+    <color name="cream">#F7F4E8</color>
+    <color name="muted_cream">#D8D2C3</color>
+    <color name="record_red">#F34A43</color>
+    <color name="glass">#D6151B16</color>
+    <color name="control_surface">#E6171C18</color>
+    <color name="panel_border">#7793B232</color>
+    <color name="status_green">#A8D935</color>
+</resources>

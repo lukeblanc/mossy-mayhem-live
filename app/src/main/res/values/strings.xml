@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Mossy Mayhem Live</string>
+    <string name="tagline">Point. Watch. Laugh.</string>
+    <string name="start_camera">WELCOME — START CAMERA</string>
+    <string name="record">RECORD</string>
+    <string name="stop">STOP</string>
+    <string name="flip">FLIP</string>
+    <string name="mute">MUTE</string>
+    <string name="unmute">SOUND</string>
+    <string name="share">SHARE</string>
+</resources>
