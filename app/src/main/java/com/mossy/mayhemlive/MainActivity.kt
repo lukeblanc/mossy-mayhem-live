@@ -39,17 +39,13 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
     private enum class ComedyMode(val apiValue: String, val badge: String) {
         FUNNY("funny", "FUNNY"),
         UNHINGED("unhinged", "UNHINGED 18+")
-    }
-
-    private enum class QualityMode(val apiValue: String, val badge: String) {
-        FULL("full", "FULL"),
-        LOW_COST("low_cost", "LOW COST")
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -66,11 +62,17 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     private var soundEnabled = true
     private var commentaryPaused = false
     private var comedyMode = ComedyMode.FUNNY
-    private var qualityMode = QualityMode.LOW_COST
-    private var lastFrameAt = 0L
-    private var framesSent = 0
+
+    private var lastLocalSampleAt = 0L
+    private var lastCloudFrameAt = 0L
+    private var lastNarrationAt = 0L
+    private var previousSceneSignature: IntArray? = null
     private var firstNarration = true
     private var connectionErrorDialogShowing = false
+
+    private var eventsDetected = 0
+    private var framesSent = 0
+    private var commentsRequested = 0
     private var sessionCostUsd = 0.0
     private var sessionBilledTokens = 0
     private var sessionModel = ""
@@ -85,20 +87,6 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         }
     }
 
-    private val narrationRunnable = object : Runnable {
-        override fun run() {
-            if (!cameraRunning || commentaryPaused) return
-
-            val client = openAIClient
-            if (framesSent >= 2 && client?.isReady == true) {
-                val sent = client.requestNarration(firstTurn = firstNarration)
-                if (sent) firstNarration = false
-            }
-
-            narrationHandler.postDelayed(this, NARRATION_INTERVAL_MS)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -108,8 +96,6 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
 
         binding.funnyModeButton.setOnClickListener { selectComedyMode(ComedyMode.FUNNY) }
         binding.unhingedModeButton.setOnClickListener { selectComedyMode(ComedyMode.UNHINGED) }
-        binding.fullQualityButton.setOnClickListener { selectQualityMode(QualityMode.FULL) }
-        binding.lowCostButton.setOnClickListener { selectQualityMode(QualityMode.LOW_COST) }
         binding.startButton.setOnClickListener { requestPermissionsAndStart() }
         binding.recordButton.setOnClickListener { toggleRecording() }
         binding.flipButton.setOnClickListener { flipCamera() }
@@ -118,17 +104,12 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         binding.pauseButton.setOnClickListener { toggleMossyPause() }
 
         updateModeButtons()
-        updateQualityButtons()
+        updateSmartStats()
     }
 
     private fun selectComedyMode(mode: ComedyMode) {
         comedyMode = mode
         updateModeButtons()
-    }
-
-    private fun selectQualityMode(mode: QualityMode) {
-        qualityMode = mode
-        updateQualityButtons()
     }
 
     private fun updateModeButtons() {
@@ -138,22 +119,9 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         binding.funnyModeButton.text = if (comedyMode == ComedyMode.FUNNY) "✓ FUNNY" else "FUNNY"
         binding.unhingedModeButton.text = if (comedyMode == ComedyMode.UNHINGED) "✓ UNHINGED 18+" else "UNHINGED 18+"
         binding.modeHint.text = if (comedyMode == ComedyMode.FUNNY) {
-            "Cheeky documentary comedy • mild language"
+            "Cheeky documentary comedy • smart scene watching"
         } else {
-            "Strong language • feral documentary roast • 18+"
-        }
-    }
-
-    private fun updateQualityButtons() {
-        styleChoiceButton(binding.fullQualityButton, qualityMode == QualityMode.FULL, false)
-        styleChoiceButton(binding.lowCostButton, qualityMode == QualityMode.LOW_COST, false)
-
-        binding.fullQualityButton.text = if (qualityMode == QualityMode.FULL) "✓ FULL" else "FULL"
-        binding.lowCostButton.text = if (qualityMode == QualityMode.LOW_COST) "✓ LOW COST" else "LOW COST"
-        binding.qualityHint.text = if (qualityMode == QualityMode.LOW_COST) {
-            "Business test • cheaper Mini model"
-        } else {
-            "Benchmark • full Realtime model"
+            "18+ feral documentary roast • smart scene watching"
         }
     }
 
@@ -190,25 +158,24 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     private fun showCameraAndStart() {
         binding.welcomePanel.visibility = View.GONE
         binding.cameraPanel.visibility = View.VISIBLE
-        binding.commentaryText.text = if (comedyMode == ComedyMode.UNHINGED) {
-            "Unhinged Mossy is joining the walk…"
-        } else {
-            "Mossy is joining the walk…"
-        }
-        binding.statusText.text = "Starting secure documentary mode…"
+        binding.statusText.text = "Starting Smart Cost Mossy…"
         binding.modeBadgeText.text = comedyMode.badge
-        binding.qualityBadgeText.text = qualityMode.badge
         binding.pauseButton.text = "PAUSE MOSSY"
-        binding.costText.text = "AI US$0.000"
 
         cameraRunning = true
         commentaryPaused = false
-        framesSent = 0
         firstNarration = true
-        lastFrameAt = 0L
+        lastLocalSampleAt = 0L
+        lastCloudFrameAt = 0L
+        lastNarrationAt = 0L
+        previousSceneSignature = null
+        eventsDetected = 0
+        framesSent = 0
+        commentsRequested = 0
         sessionCostUsd = 0.0
         sessionBilledTokens = 0
         sessionModel = ""
+        updateSmartStats()
 
         startOpenAIDocumentary()
         startCamera()
@@ -218,7 +185,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         openAIClient?.close()
         openAIClient = OpenAIRealtimeClient(
             comedyMode.apiValue,
-            qualityMode.apiValue,
+            "low_cost",
             this
         ).also { client ->
             client.setMuted(!soundEnabled)
@@ -258,40 +225,56 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                         }
 
                         val now = SystemClock.elapsedRealtime()
-                        if (now - lastFrameAt < FRAME_INTERVAL_MS) {
+                        if (now - lastLocalSampleAt < LOCAL_SAMPLE_INTERVAL_MS) {
                             imageProxy.close()
                             return@setAnalyzer
                         }
-                        lastFrameAt = now
+                        lastLocalSampleAt = now
 
                         try {
                             val source = imageProxy.toBitmap()
                             val upright = rotateBitmap(source, imageProxy.imageInfo.rotationDegrees)
-                            val scaled = scaleForOpenAI(upright)
-                            val bytes = ByteArrayOutputStream().use { stream ->
-                                scaled.compress(Bitmap.CompressFormat.JPEG, 55, stream)
-                                stream.toByteArray()
-                            }
+                            val signature = makeSceneSignature(upright)
+                            val previous = previousSceneSignature
+                            val changed = previous != null && isMeaningfulSceneChange(previous, signature)
+                            previousSceneSignature = signature
 
-                            if (openAIClient?.sendImageFrame(bytes) == true) {
-                                framesSent += 1
-                                if (framesSent % 4 == 0) {
-                                    runOnUiThread {
-                                        if (!commentaryPaused) {
-                                            binding.statusText.text = "${comedyMode.badge} • Mossy is watching"
-                                        }
-                                    }
+                            val heartbeatDue = lastCloudFrameAt == 0L ||
+                                now - lastCloudFrameAt >= HEARTBEAT_INTERVAL_MS
+                            val eventDue = changed &&
+                                now - lastCloudFrameAt >= EVENT_CLOUD_COOLDOWN_MS
+                            val shouldSend = (eventDue || heartbeatDue) && openAIClient?.isReady == true
+
+                            if (shouldSend) {
+                                if (eventDue) eventsDetected += 1
+                                val cloudImage = scaleForCloud(upright)
+                                val bytes = ByteArrayOutputStream().use { stream ->
+                                    cloudImage.compress(Bitmap.CompressFormat.JPEG, 45, stream)
+                                    stream.toByteArray()
                                 }
+
+                                if (openAIClient?.sendImageFrame(bytes) == true) {
+                                    framesSent += 1
+                                    lastCloudFrameAt = now
+                                    runOnUiThread {
+                                        binding.statusText.text = if (eventDue) {
+                                            "Mossy spotted a change"
+                                        } else {
+                                            "Mossy checking the scene"
+                                        }
+                                        updateSmartStats()
+                                    }
+                                    scheduleNarrationForKeyMoment()
+                                }
+
+                                if (cloudImage !== upright) cloudImage.recycle()
                             }
 
-                            if (scaled !== upright) scaled.recycle()
                             if (upright !== source) upright.recycle()
                             source.recycle()
                         } catch (_: Exception) {
                             runOnUiThread {
-                                if (!commentaryPaused) {
-                                    binding.statusText.text = "Camera live — preparing the next scene"
-                                }
+                                if (!commentaryPaused) binding.statusText.text = "Mossy watching"
                             }
                         } finally {
                             imageProxy.close()
@@ -309,7 +292,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     videoCapture
                 )
                 if (!commentaryPaused) {
-                    binding.statusText.text = "Camera live — connecting secure Mossy brain"
+                    binding.statusText.text = "Camera live • Smart Cost waking up"
                 }
             } catch (error: Exception) {
                 binding.statusText.text = "Camera could not start"
@@ -318,16 +301,65 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun scheduleNarrationForKeyMoment() {
+        val now = SystemClock.elapsedRealtime()
+        if (!firstNarration && now - lastNarrationAt < NARRATION_COOLDOWN_MS) return
+
+        narrationHandler.postDelayed({
+            if (!cameraRunning || commentaryPaused) return@postDelayed
+            val sent = openAIClient?.requestNarration(firstTurn = firstNarration) == true
+            if (sent) {
+                firstNarration = false
+                commentsRequested += 1
+                lastNarrationAt = SystemClock.elapsedRealtime()
+                updateSmartStats()
+            }
+        }, NARRATION_AFTER_EVENT_DELAY_MS)
+    }
+
+    private fun makeSceneSignature(source: Bitmap): IntArray {
+        val tiny = Bitmap.createScaledBitmap(source, SIGNATURE_WIDTH, SIGNATURE_HEIGHT, true)
+        val pixels = IntArray(SIGNATURE_WIDTH * SIGNATURE_HEIGHT)
+        tiny.getPixels(pixels, 0, SIGNATURE_WIDTH, 0, 0, SIGNATURE_WIDTH, SIGNATURE_HEIGHT)
+        if (tiny !== source) tiny.recycle()
+
+        return IntArray(pixels.size) { index ->
+            val color = pixels[index]
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            (r * 30 + g * 59 + b * 11) / 100
+        }
+    }
+
+    private fun isMeaningfulSceneChange(previous: IntArray, current: IntArray): Boolean {
+        if (previous.size != current.size || previous.isEmpty()) return true
+
+        var changedPixels = 0
+        var totalDifference = 0L
+        for (index in previous.indices) {
+            val difference = abs(previous[index] - current[index])
+            totalDifference += difference
+            if (difference >= PIXEL_CHANGE_THRESHOLD) changedPixels += 1
+        }
+
+        val changedFraction = changedPixels.toDouble() / previous.size.toDouble()
+        val averageDifference = totalDifference.toDouble() / previous.size.toDouble()
+
+        return changedFraction >= CHANGED_PIXEL_FRACTION ||
+            averageDifference >= AVERAGE_CHANGE_THRESHOLD
+    }
+
     private fun rotateBitmap(source: Bitmap, rotationDegrees: Int): Bitmap {
         if (rotationDegrees == 0) return source
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
         return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
-    private fun scaleForOpenAI(source: Bitmap): Bitmap {
+    private fun scaleForCloud(source: Bitmap): Bitmap {
         val largest = maxOf(source.width, source.height)
-        if (largest <= 640) return source
-        val scale = 640f / largest.toFloat()
+        if (largest <= CLOUD_IMAGE_MAX_EDGE) return source
+        val scale = CLOUD_IMAGE_MAX_EDGE.toFloat() / largest.toFloat()
         val width = (source.width * scale).toInt().coerceAtLeast(1)
         val height = (source.height * scale).toInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(source, width, height, true)
@@ -336,42 +368,33 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     override fun onReady() {
         runOnUiThread {
             if (commentaryPaused) {
-                binding.statusText.text = "MOSSY PAUSED • camera and recording stay live"
+                binding.statusText.text = "MOSSY PAUSED"
                 return@runOnUiThread
             }
-
-            binding.statusText.text = "${comedyMode.badge} • ${qualityMode.badge} • CONNECTED"
-            binding.commentaryText.text = "Connected. Give Mossy a few seconds to watch before he starts the story."
-            narrationHandler.removeCallbacks(narrationRunnable)
-            narrationHandler.postDelayed(narrationRunnable, 4_000L)
+            binding.statusText.text = "Mossy ready • Smart Cost"
         }
     }
 
     override fun onStatus(message: String) {
         runOnUiThread {
-            if (!commentaryPaused) binding.statusText.text = message
+            if (!commentaryPaused && !cameraRunning) binding.statusText.text = message
         }
     }
 
     override fun onTranscript(text: String) {
-        runOnUiThread {
-            if (!commentaryPaused) binding.commentaryText.text = text
-        }
+        // Voice-first customer experience: transcript intentionally hidden from the camera view.
     }
 
     override fun onUsageUpdate(costUsd: Double, billedTokens: Int, model: String) {
         sessionCostUsd = costUsd
         sessionBilledTokens = billedTokens
         sessionModel = model
-        runOnUiThread {
-            binding.costText.text = formatCost(costUsd)
-        }
+        runOnUiThread { updateSmartStats() }
     }
 
     override fun onFailure(message: String) {
         runOnUiThread {
             binding.statusText.text = "Mossy connection failed"
-            binding.commentaryText.text = "Mossy's documentary brain didn't connect."
 
             if (!connectionErrorDialogShowing && !isFinishing) {
                 connectionErrorDialogShowing = true
@@ -380,6 +403,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     .setMessage(message)
                     .setPositiveButton("RETRY") { _, _ ->
                         connectionErrorDialogShowing = false
+                        lastCloudFrameAt = 0L
                         startOpenAIDocumentary()
                     }
                     .setNegativeButton("CLOSE") { _, _ ->
@@ -395,18 +419,17 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         commentaryPaused = !commentaryPaused
 
         if (commentaryPaused) {
-            narrationHandler.removeCallbacks(narrationRunnable)
+            narrationHandler.removeCallbacksAndMessages(null)
             openAIClient?.pauseNarration()
             binding.pauseButton.text = "RESUME MOSSY"
-            binding.statusText.text = "MOSSY PAUSED • no AI frames being sent"
-            binding.commentaryText.text = "Mossy is paused. Camera and recording can keep rolling."
+            binding.statusText.text = "MOSSY PAUSED • recording can keep going"
         } else {
-            framesSent = 0
-            lastFrameAt = 0L
+            previousSceneSignature = null
+            lastLocalSampleAt = 0L
+            lastCloudFrameAt = 0L
             openAIClient?.resumeNarration(soundEnabled)
             binding.pauseButton.text = "PAUSE MOSSY"
-            binding.statusText.text = "${comedyMode.badge} • Mossy is watching again"
-            narrationHandler.postDelayed(narrationRunnable, 3_000L)
+            binding.statusText.text = "Mossy watching again"
         }
     }
 
@@ -415,7 +438,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
             it.stop()
             activeRecording = null
             binding.recordButton.setText(R.string.record)
-            binding.statusText.text = "Saving • ${formatCost(sessionCostUsd)}"
+            binding.statusText.text = "Saving video…"
             return
         }
 
@@ -440,7 +463,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
             when (event) {
                 is VideoRecordEvent.Start -> {
                     binding.recordButton.setText(R.string.stop)
-                    binding.statusText.text = "RECORDING • ${qualityMode.badge}"
+                    binding.statusText.text = "● RECORDING • Mossy watching"
                 }
 
                 is VideoRecordEvent.Finalize -> {
@@ -449,7 +472,7 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
                     if (!event.hasError()) {
                         lastVideoFile = file
                         binding.shareButton.isEnabled = true
-                        binding.statusText.text = "Saved • ${formatCost(sessionCostUsd)} • SHARE"
+                        binding.statusText.text = "Saved • tap SHARE"
                     } else {
                         file.delete()
                         binding.statusText.text = "Recording failed"
@@ -485,6 +508,8 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
+        previousSceneSignature = null
+        lastCloudFrameAt = 0L
         startCamera()
     }
 
@@ -494,14 +519,20 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
         openAIClient?.setMuted(commentaryPaused || !soundEnabled)
         Toast.makeText(
             this,
-            if (soundEnabled) "Mossy's back on the documentary mic." else "Mossy's watching silently.",
+            if (soundEnabled) "Mossy's voice is on." else "Mossy's watching silently.",
             Toast.LENGTH_SHORT
         ).show()
     }
 
+    private fun updateSmartStats() {
+        if (!::binding.isInitialized) return
+        binding.smartStatsText.text =
+            "E $eventsDetected • F $framesSent • C $commentsRequested • ${formatCost(sessionCostUsd)}"
+    }
+
     private fun formatCost(costUsd: Double): String {
         val decimals = if (costUsd < 0.01) 4 else 3
-        return "AI US$${String.format(Locale.US, "%.${decimals}f", costUsd)}"
+        return "US$${String.format(Locale.US, "%.${decimals}f", costUsd)}"
     }
 
     override fun onDestroy() {
@@ -514,7 +545,18 @@ class MainActivity : AppCompatActivity(), OpenAIRealtimeClient.Listener {
     }
 
     companion object {
-        private const val FRAME_INTERVAL_MS = 2_000L
-        private const val NARRATION_INTERVAL_MS = 7_000L
+        private const val LOCAL_SAMPLE_INTERVAL_MS = 750L
+        private const val EVENT_CLOUD_COOLDOWN_MS = 4_500L
+        private const val HEARTBEAT_INTERVAL_MS = 15_000L
+        private const val NARRATION_COOLDOWN_MS = 5_000L
+        private const val NARRATION_AFTER_EVENT_DELAY_MS = 650L
+
+        private const val SIGNATURE_WIDTH = 48
+        private const val SIGNATURE_HEIGHT = 36
+        private const val PIXEL_CHANGE_THRESHOLD = 34
+        private const val CHANGED_PIXEL_FRACTION = 0.12
+        private const val AVERAGE_CHANGE_THRESHOLD = 18.0
+
+        private const val CLOUD_IMAGE_MAX_EDGE = 384
     }
 }
